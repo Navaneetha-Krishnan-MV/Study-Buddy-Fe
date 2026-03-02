@@ -1,15 +1,70 @@
-import { BookOpen, AlertCircle, Layers } from '../icons/Icons';
-import { HOME_HIGHLIGHTS, UNITS_BY_SUBJECT } from '../../data/mockData';
+import { useEffect, useState } from 'react';
+import { getHomeSummary, getSubjectUnits } from '../../api';
+import { BookOpen, Layers } from '../icons/Icons';
 import UnitCard from './UnitCard';
 
 export default function HomeTab({ selectedSubject, selectedSemester, onGoToMaterials }) {
+  const [units, setUnits] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const selectedSubjectId = selectedSubject?.id || null;
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadHomeData() {
+      if (!selectedSubjectId) {
+        setUnits([]);
+        setSummary(null);
+        setError('');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+
+      try {
+        const [unitsData, summaryData] = await Promise.all([
+          getSubjectUnits(selectedSubjectId),
+          getHomeSummary(selectedSubjectId),
+        ]);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setUnits(Array.isArray(unitsData) ? unitsData : []);
+        setSummary(summaryData || null);
+      } catch (loadError) {
+        if (isCancelled) {
+          return;
+        }
+        setUnits([]);
+        setSummary(null);
+        setError(loadError.message || 'Failed to load subject overview.');
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadHomeData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedSubjectId]);
+
   if (!selectedSubject) {
     return (
       <section className="animate-[fade-in_220ms_ease-out] py-24 text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-300/30 bg-slate-100 text-slate-700">
           <BookOpen size={30} />
         </div>
-        <h2 className="mt-5 text-2xl font-bold text-slate-900">Welcome to StudyBuddy</h2>
+        <h2 className="mt-5 text-2xl font-bold text-slate-900">Welcome to Hushh Study</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-slate-400 sm:text-base">
           Select your semester and subject from the top bar to unlock units, discussions, quiz practice, and leaderboard tracking.
         </p>
@@ -17,13 +72,11 @@ export default function HomeTab({ selectedSubject, selectedSemester, onGoToMater
     );
   }
 
-  const units = UNITS_BY_SUBJECT[selectedSubject.id] || [];
-  const completedCount = units.filter((unit) => unit.progress === 100).length;
-  const inProgressCount = units.filter((unit) => unit.progress > 0 && unit.progress < 100).length;
-  const totalMaterials = units.reduce((total, unit) => total + unit.materialCount, 0);
-  const averageProgress = units.length
-    ? Math.round(units.reduce((total, unit) => total + unit.progress, 0) / units.length)
-    : 0;
+  const completedCount = summary?.completedCount ?? 0;
+  const inProgressCount = summary?.inProgressCount ?? 0;
+  const notStartedCount = summary?.notStartedCount ?? 0;
+  const totalMaterials = summary?.totalMaterials ?? 0;
+  const averageProgress = summary?.averageProgress ?? 0;
 
   return (
     <section className="animate-[fade-in_220ms_ease-out] space-y-6">
@@ -53,18 +106,9 @@ export default function HomeTab({ selectedSubject, selectedSemester, onGoToMater
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Completed" value={completedCount} tone="emerald" />
           <StatCard label="In progress" value={inProgressCount} tone="violet" />
-          <StatCard label="Not started" value={units.length - completedCount - inProgressCount} tone="slate" />
+          <StatCard label="Not started" value={notStartedCount} tone="slate" />
           <StatCard label="Materials" value={totalMaterials} tone="blue" />
         </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        {HOME_HIGHLIGHTS.map((item) => (
-          <div key={item.id} className="glass-card rounded-xl p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">{item.title}</p>
-            <p className="mt-1.5 text-sm text-slate-600">{item.text}</p>
-          </div>
-        ))}
       </div>
 
       <div>
@@ -76,18 +120,21 @@ export default function HomeTab({ selectedSubject, selectedSemester, onGoToMater
           </button>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {units.map((unit) => (
-            <UnitCard key={unit.id} unit={unit} />
-          ))}
-        </div>
-      </div>
-
-      <div className="flex items-start gap-2 rounded-xl border border-slate-400/25 bg-slate-100 p-4 text-sm text-slate-600">
-        <AlertCircle size={16} className="mt-0.5 text-slate-600" />
-        <p>
-          Use the Materials tab to download notes and the Discussion tab to ask doubts. Practicing quiz cards regularly will improve your leaderboard rank.
-        </p>
+        {loading ? (
+          <div className="glass-card rounded-2xl py-12 text-center text-sm text-slate-400">Loading units...</div>
+        ) : error ? (
+          <div className="glass-card rounded-2xl border border-red-200 bg-red-50 py-12 text-center text-sm text-red-700">
+            {error}
+          </div>
+        ) : units.length ? (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {units.map((unit) => (
+              <UnitCard key={unit.id} unit={unit} />
+            ))}
+          </div>
+        ) : (
+          <div className="glass-card rounded-2xl py-12 text-center text-sm text-slate-400">No units found for this subject.</div>
+        )}
       </div>
     </section>
   );

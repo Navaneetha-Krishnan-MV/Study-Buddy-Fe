@@ -28,9 +28,8 @@ function SidebarContent({ activeTab, onTabChange, onCloseMobile }) {
               key={id}
               type="button"
               onClick={() => onTabChange(id)}
-              className={`no-select flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
-                isActive ? 'tab-active' : 'tab-inactive'
-              }`}
+              className={`no-select flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${isActive ? 'tab-active' : 'tab-inactive'
+                }`}
             >
               {createElement(Icon, { size: 16, className: isActive ? 'text-slate-700' : 'text-slate-500' })}
               <span>{label}</span>
@@ -39,12 +38,7 @@ function SidebarContent({ activeTab, onTabChange, onCloseMobile }) {
         })}
       </nav>
 
-      <div className="p-4 pt-2">
-        <div className="glass-card rounded-xl p-3 text-xs text-slate-600">
-          <p className="font-semibold text-slate-900">Daily streak</p>
-          <p className="mt-1 text-slate-500">Keep learning every day to climb faster on the leaderboard.</p>
-        </div>
-      </div>
+
     </div>
   );
 }
@@ -53,25 +47,22 @@ export default function Sidebar({ activeTab, onTabChange, isDesktopOpen, isMobil
   return (
     <>
       <aside
-        className={`fixed inset-y-0 left-0 z-30 hidden w-56 border-r border-slate-200 bg-white pt-16 transition-transform duration-300 md:block ${
-          isDesktopOpen ? 'md:translate-x-0 md:pointer-events-auto' : 'md:-translate-x-full md:pointer-events-none'
-        }`}
+        className={`fixed inset-y-0 left-0 z-30 hidden w-56 border-r border-slate-200 bg-white pt-16 transition-transform duration-300 md:block ${isDesktopOpen ? 'md:translate-x-0 md:pointer-events-auto' : 'md:-translate-x-full md:pointer-events-none'
+          }`}
       >
         <SidebarContent activeTab={activeTab} onTabChange={onTabChange} onCloseMobile={onCloseMobile} />
       </aside>
 
       <div
-        className={`fixed inset-0 z-50 bg-black/30 transition-opacity md:hidden ${
-          isMobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
+        className={`fixed inset-0 z-50 bg-black/30 transition-opacity md:hidden ${isMobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
         onClick={onCloseMobile}
         aria-hidden="true"
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-slate-200 bg-white shadow-xl transition-transform duration-300 md:hidden ${
-          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-slate-200 bg-white shadow-xl transition-transform duration-300 md:hidden ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         <SidebarContent activeTab={activeTab} onTabChange={onTabChange} onCloseMobile={onCloseMobile} />
       </aside>

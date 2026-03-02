@@ -1,27 +1,166 @@
-import { useState } from 'react';
-import { MessageSquare, Plus, Search } from '../icons/Icons';
-import { THREADS_BY_SUBJECT, UNITS_BY_SUBJECT } from '../../data/mockData';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  createThread as createThreadApi,
+  getSubjectUnits,
+  getThreads,
+} from '../../api';
+import { Filter, MessageSquare, Plus, Search } from '../icons/Icons';
 import NewQueryModal from './NewQueryModal';
 import ThreadCard from './ThreadCard';
 import ThreadDetail from './ThreadDetail';
 
+const ALL_UNITS_VALUE = 'all';
+
 function normalizeThread(thread) {
-  const comments = Array.isArray(thread.comments) ? thread.comments : [];
   return {
     ...thread,
-    comments,
-    commentCount: typeof thread.commentCount === 'number' ? thread.commentCount : comments.length,
+    tags: Array.isArray(thread?.tags) ? thread.tags : [],
+    author: thread?.author || { name: 'Unknown', avatar: 'NA' },
+    upvotes: Number(thread?.upvotes || 0),
+    downvotes: Number(thread?.downvotes || 0),
+    commentCount: Number(thread?.commentCount || 0),
+    myVote: Number(thread?.myVote || 0),
   };
 }
 
 export default function DiscussionTab({ selectedSubject }) {
-  const baseThreads = (selectedSubject ? THREADS_BY_SUBJECT[selectedSubject.id] : []) || [];
-  const units = (selectedSubject ? UNITS_BY_SUBJECT[selectedSubject.id] : []) || [];
+  const [threads, setThreads] = useState([]);
+  const [units, setUnits] = useState([]);
 
-  const [threads, setThreads] = useState(() => baseThreads.map(normalizeThread));
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [unitFilter, setUnitFilter] = useState(ALL_UNITS_VALUE);
+
+  const [loadingThreads, setLoadingThreads] = useState(false);
+  const [loadingUnits, setLoadingUnits] = useState(false);
+  const [error, setError] = useState('');
+
   const [showNewModal, setShowNewModal] = useState(false);
+  const [creatingThread, setCreatingThread] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState(null);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedQuery(query.trim());
+    }, 250);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [query]);
+
+  useEffect(() => {
+    setSelectedThreadId(null);
+    setQuery('');
+    setDebouncedQuery('');
+    setUnitFilter(ALL_UNITS_VALUE);
+  }, [selectedSubject?.id]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadUnits() {
+      if (!selectedSubject) {
+        setUnits([]);
+        return;
+      }
+
+      setLoadingUnits(true);
+
+      try {
+        const data = await getSubjectUnits(selectedSubject.id);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setUnits(Array.isArray(data) ? data : []);
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+        setUnits([]);
+      } finally {
+        if (!isCancelled) {
+          setLoadingUnits(false);
+        }
+      }
+    }
+
+    loadUnits();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedSubject]);
+
+  const loadThreads = useCallback(async () => {
+    if (!selectedSubject) {
+      setThreads([]);
+      setError('');
+      return;
+    }
+
+    setLoadingThreads(true);
+    setError('');
+
+    try {
+      const data = await getThreads(selectedSubject.id, {
+        q: debouncedQuery || undefined,
+        unitId: unitFilter !== ALL_UNITS_VALUE ? unitFilter : undefined,
+      });
+
+      setThreads((Array.isArray(data) ? data : []).map(normalizeThread));
+    } catch (loadError) {
+      setThreads([]);
+      setError(loadError.message || 'Failed to load discussions.');
+    } finally {
+      setLoadingThreads(false);
+    }
+  }, [selectedSubject, debouncedQuery, unitFilter]);
+
+  useEffect(() => {
+    loadThreads();
+  }, [loadThreads]);
+
+  const handleCreateThread = async ({ title, description, tags, unitId }) => {
+    if (!selectedSubject) {
+      return;
+    }
+
+    setCreatingThread(true);
+    setError('');
+
+    try {
+      const payload = {
+        title,
+        description,
+        tags,
+      };
+
+      if (unitId && unitId !== ALL_UNITS_VALUE) {
+        payload.unitId = unitId;
+      }
+
+      const created = await createThreadApi(selectedSubject.id, payload);
+
+      setShowNewModal(false);
+      await loadThreads();
+
+      if (created?.id) {
+        setSelectedThreadId(created.id);
+      }
+    } catch (createError) {
+      setError(createError.message || 'Failed to create thread.');
+    } finally {
+      setCreatingThread(false);
+    }
+  };
+
+  const selectedThread = useMemo(
+    () => threads.find((thread) => thread.id === selectedThreadId) || null,
+    [threads, selectedThreadId],
+  );
 
   if (!selectedSubject) {
     return (
@@ -32,67 +171,15 @@ export default function DiscussionTab({ selectedSubject }) {
     );
   }
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredThreads = normalizedQuery
-    ? threads.filter((thread) => {
-        return (
-          thread.title.toLowerCase().includes(normalizedQuery) ||
-          thread.description.toLowerCase().includes(normalizedQuery) ||
-          thread.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery)) ||
-          thread.author.name.toLowerCase().includes(normalizedQuery)
-        );
-      })
-    : threads;
-
-  const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
-
-  const handleCreateThread = ({ title, description, tags, unitId }) => {
-    const targetUnit = units.find((unit) => unit.id === unitId);
-    const unitTag = targetUnit ? `Unit ${targetUnit.number}` : null;
-
-    const nextThread = normalizeThread({
-      id: `local-thread-${Date.now()}`,
-      title,
-      description,
-      tags: unitTag ? [unitTag, ...tags] : tags,
-      author: { name: 'You', avatar: 'YO' },
-      upvotes: 0,
-      downvotes: 0,
-      timeAgo: 'just now',
-      comments: [],
-    });
-
-    setThreads((current) => [nextThread, ...current]);
-    setShowNewModal(false);
-  };
-
-  const handleAddComment = (threadId, text) => {
-    setThreads((current) =>
-      current.map((thread) => {
-        if (thread.id !== threadId) {
-          return thread;
-        }
-
-        const nextComment = {
-          id: `${threadId}-reply-${Date.now()}`,
-          author: { name: 'You', avatar: 'YO' },
-          text,
-          timeAgo: 'just now',
-          upvotes: 0,
-        };
-
-        const comments = [...thread.comments, nextComment];
-        return {
-          ...thread,
-          comments,
-          commentCount: comments.length,
-        };
-      }),
+  if (selectedThreadId) {
+    return (
+      <ThreadDetail
+        threadId={selectedThreadId}
+        fallbackThread={selectedThread}
+        onBack={() => setSelectedThreadId(null)}
+        onUpdated={loadThreads}
+      />
     );
-  };
-
-  if (selectedThread) {
-    return <ThreadDetail thread={selectedThread} onBack={() => setSelectedThreadId(null)} onAddComment={handleAddComment} />;
   }
 
   return (
@@ -101,21 +188,31 @@ export default function DiscussionTab({ selectedSubject }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Discussion Forum</h1>
-            <p className="mt-1 text-sm text-slate-400">{selectedSubject.name} - ask doubts, share resources, and help peers.</p>
+            <p className="mt-1 text-sm text-slate-400">
+              {selectedSubject.name} - ask doubts, share resources, and help peers.
+            </p>
           </div>
 
-          <button type="button" onClick={() => setShowNewModal(true)} className="btn-primary text-sm">
+          <button
+            type="button"
+            onClick={() => setShowNewModal(true)}
+            className="btn-primary text-sm"
+            disabled={loadingUnits}
+          >
             <Plus size={14} />
             New query
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-center">
           <div className="relative">
-
-            {query == '' && 
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            }<input
+            {!query ? (
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+              />
+            ) : null}
+            <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="     Search threads by title, tag, or author"
@@ -123,19 +220,52 @@ export default function DiscussionTab({ selectedSubject }) {
             />
           </div>
 
+          <div className="relative">
+            <Filter
+              size={13}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+            />
+            <select
+              value={unitFilter}
+              onChange={(event) => setUnitFilter(event.target.value)}
+              className="input-field w-full pl-9 text-sm"
+            >
+              <option value={ALL_UNITS_VALUE}>All units</option>
+              {units.map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  Unit {unit.number} - {unit.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            {filteredThreads.length} threads
+            {threads.length} threads
           </div>
         </div>
       </header>
 
+      {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+
       <div className="space-y-3">
-        {filteredThreads.length ? (
-          filteredThreads.map((thread) => (
-            <ThreadCard key={thread.id} thread={thread} onOpen={() => setSelectedThreadId(thread.id)} />
+        {loadingThreads ? (
+          <div className="glass-card rounded-2xl py-14 text-center text-slate-400">Loading discussions...</div>
+        ) : threads.length ? (
+          threads.map((thread) => (
+            <ThreadCard
+              key={thread.id}
+              thread={thread}
+              onOpen={() => setSelectedThreadId(thread.id)}
+            />
           ))
         ) : (
-          <div className="glass-card rounded-2xl py-14 text-center text-slate-400">No discussions matched your search.</div>
+          <div className="glass-card rounded-2xl py-14 text-center text-slate-400">
+            No discussions matched your search.
+          </div>
         )}
       </div>
 
@@ -144,6 +274,7 @@ export default function DiscussionTab({ selectedSubject }) {
           onClose={() => setShowNewModal(false)}
           onCreate={handleCreateThread}
           units={units}
+          creating={creatingThread}
         />
       ) : null}
     </section>

@@ -1,25 +1,33 @@
-import { useState } from 'react';
-import { Search, Zap } from '../icons/Icons';
-import { QUIZZES_BY_SUBJECT } from '../../data/mockData';
-import QuizCard from './QuizCard';
+import { useRef, useState } from 'react';
+import { Zap } from '../icons/Icons';
+import { getQuizResult, startQuiz } from '../../api';
 import QuizModal from './QuizModal';
 
-const DIFFICULTY_FILTERS = ['All', 'Easy', 'Medium', 'Hard'];
+const DIFFICULTIES = ['easy', 'medium', 'hard'];
 
-function formatAttemptDate() {
-  const now = new Date();
-  return now.toLocaleDateString('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-  });
+function difficultyColour(d) {
+  if (d === 'easy') return 'border-green-200 bg-green-50 text-green-800';
+  if (d === 'medium') return 'border-yellow-200 bg-yellow-50 text-yellow-800';
+  return 'border-red-200 bg-red-50 text-red-800';
 }
 
-export default function QuizTab({ selectedSubject }) {
-  const [search, setSearch] = useState('');
-  const [difficulty, setDifficulty] = useState('All');
+function transformQuestions(apiQuestions) {
+  return apiQuestions.map((q) => ({
+    id: q.id,
+    text: q.question,
+    options: q.options.map((opt) => opt.replace(/^[A-D]\.\s*/, '')),
+    correct: ['A', 'B', 'C', 'D'].indexOf(q.correct_answer.toUpperCase()),
+    explanation: q.explanation,
+  }));
+}
+
+export default function QuizTab({ selectedSubject, realMaterials }) {
+  const [loading, setLoading] = useState(null);
+  const [error, setError] = useState(null);
   const [activeQuiz, setActiveQuiz] = useState(null);
-  const [attempts, setAttempts] = useState({});
+  const [scores, setScores] = useState({});
+  const sessionRef = useRef(null);
+  const roundsRef = useRef(null);
 
   if (!selectedSubject) {
     return (
@@ -30,21 +38,50 @@ export default function QuizTab({ selectedSubject }) {
     );
   }
 
-  const quizzes = QUIZZES_BY_SUBJECT[selectedSubject.id] || [];
-  const normalizedSearch = search.trim().toLowerCase();
-  const filteredQuizzes = quizzes.filter((quiz) => {
-    const difficultyMatches = difficulty === 'All' || quiz.difficulty === difficulty;
-    const searchMatches =
-      !normalizedSearch ||
-      quiz.name.toLowerCase().includes(normalizedSearch) ||
-      quiz.unitName.toLowerCase().includes(normalizedSearch);
 
-    return difficultyMatches && searchMatches;
-  });
+  const hasRealData = realMaterials && Object.keys(realMaterials).length > 0;
+  const realUnit = hasRealData ? Object.keys(realMaterials)[0] : 'general';
 
-  const attemptList = Object.values(attempts);
-  const average = attemptList.length
-    ? Math.round(attemptList.reduce((total, item) => total + item.scorePercent, 0) / attemptList.length)
+  const realSubject = hasRealData ? selectedSubject.name.toLowerCase().split(' ').pop() : selectedSubject.name;
+
+  const handleStart = async (difficulty) => {
+    setError(null);
+    setLoading(difficulty);
+    try {
+      const session = await startQuiz(realSubject, realUnit, difficulty);
+      sessionRef.current = session;
+      roundsRef.current = session.rounds;
+
+      const round = session.rounds.find((r) => r.difficulty === difficulty);
+      if (!round) throw new Error('Round not found in session');
+
+      setActiveQuiz({
+        id: `${session.session_id}-${difficulty}`,
+        name: `${selectedSubject.name} — ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} Quiz`,
+        difficulty,
+        questions: transformQuestions(round.questions),
+        timeLimit: 10,
+        sessionId: session.session_id,
+      });
+    } catch (err) {
+      setError(err.message || 'Failed to start quiz. Is the API server running?');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleComplete = async (result) => {
+    setScores((prev) => ({ ...prev, [result.difficulty]: result.scorePercent }));
+    try {
+      const res = await getQuizResult(result.sessionId);
+      console.log('Final result:', res);
+    } catch (resultError) {
+      console.error('Failed to fetch quiz result:', resultError);
+    }
+  };
+
+  const avgScore = Object.values(scores).length
+    ? Math.round(Object.values(scores).reduce((a, b) => a + b, 0) / Object.values(scores).length)
     : 0;
 
   return (
@@ -53,78 +90,67 @@ export default function QuizTab({ selectedSubject }) {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Quiz Practice</h1>
-            <p className="mt-1 text-sm text-slate-400">{selectedSubject.name} - timed quizzes for focused revision.</p>
+            <p className="mt-1 text-sm text-slate-400">
+              {selectedSubject.name} — AI-generated quizzes across 3 difficulty levels.
+            </p>
           </div>
-
           <div className="grid grid-cols-3 gap-2">
-            <SummaryCell label="Quizzes" value={quizzes.length} />
-            <SummaryCell label="Attempted" value={attemptList.length} />
-            <SummaryCell label="Avg score" value={`${average}%`} />
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2.5">
-          <div className="relative min-w-[220px] flex-1">
-            {search == ''&&
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            }<input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="    Search quiz by name or unit"
-              className="input-field pl-9"
-            />
-          </div>
-
-          <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-            {DIFFICULTY_FILTERS.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setDifficulty(item)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                  difficulty === item
-                    ? 'bg-slate-100 text-slate-900'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {item}
-              </button>
-            ))}
+            <SummaryCell label="Rounds" value={3} />
+            <SummaryCell label="Attempted" value={Object.keys(scores).length} />
+            <SummaryCell label="Avg score" value={`${avgScore}%`} />
           </div>
         </div>
       </header>
 
-      <div className="space-y-3">
-        {filteredQuizzes.length ? (
-          filteredQuizzes.map((quiz) => (
-            <QuizCard
-              key={quiz.id}
-              quiz={quiz}
-              onStart={setActiveQuiz}
-              lastAttempt={attempts[quiz.id]}
-            />
-          ))
-        ) : (
-          <div className="glass-card rounded-2xl py-14 text-center text-slate-400">No quizzes matched your filter.</div>
-        )}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {DIFFICULTIES.map((difficulty) => (
+          <div
+            key={difficulty}
+            className="glass-card flex flex-col items-start gap-3 rounded-2xl p-5"
+          >
+            <span
+              className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold capitalize ${difficultyColour(difficulty)}`}
+            >
+              {difficulty}
+            </span>
+            <p className="text-sm font-semibold text-slate-800 capitalize">
+              {difficulty} Round
+            </p>
+            <p className="text-xs text-slate-500">10 AI-generated questions from your PDFs.</p>
+            {scores[difficulty] !== undefined && (
+              <p className="text-xs font-semibold text-slate-700">
+                Last score: {scores[difficulty]}%
+              </p>
+            )}
+            <button
+              type="button"
+              className="btn-primary mt-auto w-full text-sm"
+              onClick={() => handleStart(difficulty)}
+              disabled={loading !== null}
+            >
+              {loading === difficulty ? 'Generating…' : 'Start Quiz'}
+            </button>
+          </div>
+        ))}
       </div>
 
-      {activeQuiz ? (
+      {activeQuiz && (
         <QuizModal
           key={activeQuiz.id}
           quiz={activeQuiz}
           onClose={() => setActiveQuiz(null)}
           onComplete={(result) => {
-            setAttempts((current) => ({
-              ...current,
-              [result.quizId]: {
-                ...result,
-                completedAt: formatAttemptDate(),
-              },
-            }));
+            setActiveQuiz(null);
+            handleComplete({ ...result, difficulty: activeQuiz.difficulty, sessionId: activeQuiz.sessionId });
           }}
         />
-      ) : null}
+      )}
     </section>
   );
 }

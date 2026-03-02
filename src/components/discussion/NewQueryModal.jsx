@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, X } from '../icons/Icons';
 
-export default function NewQueryModal({ onClose, onCreate, units }) {
+export default function NewQueryModal({ onClose, onCreate, units, creating = false }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [unitId, setUnitId] = useState(units[0]?.id || 'all');
@@ -111,7 +111,7 @@ export default function NewQueryModal({ onClose, onCreate, units }) {
             </button>
             <button
               type="button"
-              disabled={!canSubmit}
+              disabled={!canSubmit || creating}
               className="btn-primary text-sm disabled:cursor-not-allowed disabled:opacity-45"
               onClick={() => {
                 onCreate({
@@ -123,7 +123,7 @@ export default function NewQueryModal({ onClose, onCreate, units }) {
               }}
             >
               <Plus size={14} />
-              Post query
+              {creating ? 'Posting...' : 'Post query'}
             </button>
           </div>
         </div>

@@ -18,9 +18,15 @@ const TYPE_META = {
   },
 };
 
-export default function MaterialRow({ material }) {
+export default function MaterialRow({ material, onDownload, isDownloading = false }) {
   const meta = TYPE_META[material.type] || TYPE_META.pdf;
   const ActionIcon = material.type === 'link' ? LinkIcon : Download;
+
+  const handleAction = () => {
+    if (typeof onDownload === 'function') {
+      onDownload(material);
+    }
+  };
 
   return (
     <article className="group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 transition hover:border-slate-300/35 hover:bg-slate-50">
@@ -29,9 +35,13 @@ export default function MaterialRow({ material }) {
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-slate-900 group-hover:text-slate-900">{material.name}</p>
+        <p className="truncate text-sm font-medium text-slate-900 group-hover:text-slate-900">
+          {material.name}
+        </p>
         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-          <span className={`rounded-md border px-1.5 py-0.5 font-semibold ${meta.className}`}>{meta.label}</span>
+          <span className={`rounded-md border px-1.5 py-0.5 font-semibold ${meta.className}`}>
+            {meta.label}
+          </span>
           {material.size ? <span>{material.size}</span> : null}
           <span>{material.date}</span>
         </div>
@@ -44,10 +54,16 @@ export default function MaterialRow({ material }) {
 
       <button
         type="button"
-        className="btn-ghost px-2 py-2 opacity-0 transition group-hover:opacity-100"
+        className="btn-ghost px-2 py-2 opacity-100 transition md:opacity-0 md:group-hover:opacity-100"
         title={material.type === 'link' ? 'Open resource' : 'Download'}
+        onClick={handleAction}
+        disabled={isDownloading}
       >
-        <ActionIcon size={13} />
+        {isDownloading ? (
+          <span className="text-xs text-slate-500">...</span>
+        ) : (
+          <ActionIcon size={13} />
+        )}
       </button>
     </article>
   );

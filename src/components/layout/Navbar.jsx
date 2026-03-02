@@ -1,4 +1,4 @@
-import { BookOpen, Brain, Menu, Sparkles } from '../icons/Icons';
+import { Brain, LogOut, Menu } from '../icons/Icons';
 
 export default function Navbar({
   semesterOptions,
@@ -9,8 +9,7 @@ export default function Navbar({
   onSubjectChange,
   selectedSubject,
   onToggleSidebar,
-  onToggleAssistant,
-  assistantOpen,
+  onLogout,
 }) {
   return (
     <header className="fixed inset-x-0 top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-xl">
@@ -27,12 +26,12 @@ export default function Navbar({
 
 
         <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
-            <BookOpen size={18} />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black text-white shadow-sm">
+            <img src="/h_logo.png" alt="Hushh Study Logo" className="h-full w-full object-cover" />
           </div>
           <div className="min-w-0 hidden sm:block">
             <p className="truncate text-sm font-semibold text-slate-900">
-              Study<span className="gradient-text">Buddy</span>
+              Hushh <span className="gradient-text">Study</span>
             </p>
             <p className="truncate text-xs text-slate-500">Smart workspace for semester prep</p>
           </div>
@@ -84,6 +83,17 @@ export default function Navbar({
             ))}
           </select>
 
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="btn-ghost px-2 py-2"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut size={16} />
+            </button>
+          )}
         </div>
       </div>
     </header>

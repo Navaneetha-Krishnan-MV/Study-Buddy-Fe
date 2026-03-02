@@ -1,11 +1,7 @@
-import { useState } from 'react';
 import { MessageSquare, ThumbsDown, ThumbsUp } from '../icons/Icons';
 
 export default function ThreadCard({ thread, onOpen }) {
-  const [vote, setVote] = useState(null);
-
-  const voteDelta = vote === 'up' ? 1 : vote === 'down' ? -1 : 0;
-  const score = thread.upvotes - thread.downvotes + voteDelta;
+  const score = Number(thread.upvotes || 0) - Number(thread.downvotes || 0);
 
   return (
     <article
@@ -21,32 +17,10 @@ export default function ThreadCard({ thread, onOpen }) {
       }}
     >
       <div className="flex gap-3">
-        <div className="flex flex-col items-center gap-1.5">
-          <button
-            type="button"
-            className={`rounded-lg p-1.5 ${vote === 'up' ? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              setVote((current) => (current === 'up' ? null : 'up'));
-            }}
-            aria-label="Upvote"
-          >
-            <ThumbsUp size={14} />
-          </button>
-
+        <div className="flex flex-col items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-2 text-slate-500">
+          <ThumbsUp size={14} />
           <span className="text-sm font-bold text-slate-900">{score}</span>
-
-          <button
-            type="button"
-            className={`rounded-lg p-1.5 ${vote === 'down' ? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              setVote((current) => (current === 'down' ? null : 'down'));
-            }}
-            aria-label="Downvote"
-          >
-            <ThumbsDown size={14} />
-          </button>
+          <ThumbsDown size={14} />
         </div>
 
         <div className="min-w-0 flex-1">
